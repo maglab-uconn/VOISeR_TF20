@@ -1,0 +1,25 @@
+{
+    "Use_Frequency": true,
+    "Orthography_Embedding_Size": null,
+    "Phoneme_Feature_File_Path": "phonetic_feature_definitions_18_features.csv",
+
+    "RNN": {
+        "Size": 300,
+        "Use_Feedback": true,
+        "Use_Recurrent": true
+        },
+
+    "Train": {
+        "Pattern_File_Path": "ELP_groupData.csv",
+        "Max_Pattern_Queue": 20,
+        "Learning_Rate": 5e-4,
+        "Inference_Timing": 2000,
+        "Checkpoint_Save_Timing": 1000
+    },
+    "Analyzer": {
+        "Batch_Size": 30
+    },
+
+    "Batch_Size":3000,
+    "Export_Path": "E:/VOISeR.TF20"
+}
