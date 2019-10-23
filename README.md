@@ -102,7 +102,7 @@ The "ELP_groupData.csv" file was used to train VOISeR.
 
 ### Method
 
-1. In terminal, type 'ipython'
+1. In terminal, type 'ipython' or 'python'.
 
 2. Type the following commands with your 'using_Epoch' and 'export_Path':
 ```
@@ -130,7 +130,7 @@ new_VOISeR.restore(start_Epoch= using_Epoch)
         letter_String_List = [<str>]
         added_Pronunciation_Dict = {<str>: <pronunciation>}        
         ```
-    * The pronunciations of all nonword must be set at add_Pronunciation_Dict
+    * The pronunciations of all nonword must be set at 'add_Pronunciation_Dict'.
 
 4. Type the following commands:
 ```
