@@ -7,11 +7,14 @@ from collections import Counter
 from ProgressBar import progress
 
 from Feeder import Feeder
+from Feeder import Load_Data as Load_Variable
 import Modules
 import Analyzer
 
 with open('Hyper_Parameters.json', 'r') as f:
     hp_Dict = json.load(f)
+
+variable_Dict = Load_Variable()
 
 class VOISeR:
     def __init__(self, start_Epoch, max_Epoch, export_Path):        
@@ -38,8 +41,8 @@ class VOISeR:
 
     @tf.function(
         input_signature=[
-            tf.TensorSpec(shape=[None, 12], dtype=tf.int32),
-            tf.TensorSpec(shape=[None, 13, 18], dtype=tf.float32)
+            tf.TensorSpec(shape=[None, variable_Dict['Max_Word_Length']], dtype=tf.int32),
+            tf.TensorSpec(shape=[None, variable_Dict['Max_Pronunciation_Length'], variable_Dict['Phonology_Size']], dtype=tf.float32)
             ],
         autograph= False,
         experimental_relax_shapes= True
@@ -65,7 +68,7 @@ class VOISeR:
 
     @tf.function(
         input_signature=[
-            tf.TensorSpec(shape=[None, 12], dtype=tf.int32)
+            tf.TensorSpec(shape=[None, variable_Dict['Max_Word_Length']], dtype=tf.int32)
             ],
         autograph= False,
         experimental_relax_shapes= True
@@ -184,8 +187,6 @@ class VOISeR:
         hidden_Dict = {}
         result_Dict = {}        
         for index, pattern_Index_Batch in enumerate(pattern_Index_Batch_List):
-            progress(index, len(pattern_Index_Batch_List), status='Inference analyzer running')
-
             batch_Hidden_Dict = self.hidden_Analyzer(inputs= hiddens[pattern_Index_Batch])
             for key, value in batch_Hidden_Dict.items():
                 if not key in hidden_Dict.keys():
@@ -197,6 +198,8 @@ class VOISeR:
                 if not key in result_Dict.keys():
                     result_Dict[key] = []
                 result_Dict[key].append(value.numpy())
+            progress(index + 1, len(pattern_Index_Batch_List), status='Inference analyzer running')
+        print()
 
         hidden_Dict = {key: np.hstack(value_List) if len(value_List[0].shape)== 1 else np.vstack(value_List) for key, value_List in hidden_Dict.items()}
         result_Dict = {key: np.hstack(value_List) if len(value_List[0].shape)== 1 else np.vstack(value_List) for key, value_List in result_Dict.items()}
@@ -300,7 +303,7 @@ if __name__ == "__main__":
     if not hp_Dict['Phoneme_Feature_File_Path'] is None:
         extract_Path_List.append("DSTR_True")
     if argument_Dict['idx'] is not None:
-        extract_Path_List.append("IDX_{}".format(hp_Dict['idx']))
+        extract_Path_List.append("IDX_{}".format(argument_Dict['idx']))
     extract_Path = os.path.join(hp_Dict['Export_Path'], ".".join(extract_Path_List))
 
     new_VOISeR = VOISeR(

@@ -8,6 +8,61 @@ import time, json;
 with open('Hyper_Parameters.json', 'r') as f:
     hp_Dict = json.load(f)
 
+def Load_Data():
+    data_Dict = {}
+
+    with open (hp_Dict['Train']['Pattern_File_Path'], 'r') as f:
+        readLines = f.readlines()[1:]
+
+    splited_ReadLine = [readLine.strip().split(',')[1:] for readLine in readLines]
+    data_Dict['Word_Index_Dict'] = {word.lower(): index for index, (word, _, _, _, _) in enumerate(splited_ReadLine)}
+    data_Dict['Pronunciation_Dict'] = {word.lower(): pronunciation for word, pronunciation, _, _, _ in splited_ReadLine}
+    data_Dict['Frequency_Dict'] = {word.lower(): float(frequency) * 0.05 + 0.1 for word, _, _, frequency, _ in splited_ReadLine}
+    data_Dict['Human_RT_Dict'] = {word.lower(): float(rt) for word, _, _, _, rt in splited_ReadLine}
+    
+    data_Dict['Max_Word_Length'] = max([len(word) for word in data_Dict['Word_Index_Dict'].keys()])
+    data_Dict['Max_Pronunciation_Length'] = max([len(pronunciation) for pronunciation in data_Dict['Pronunciation_Dict'].values()])
+
+    if len(data_Dict['Word_Index_Dict'].keys()) != len(set(data_Dict['Word_Index_Dict'].keys())):
+        raise Exception('More than one word of the same spelling is in the data!')
+
+    letter_Set = set()
+    phoneme_Set = set()
+    for word, pronunciation in data_Dict['Pronunciation_Dict'].items():
+        letter_Set.update(set(word))
+        phoneme_Set.update(set(pronunciation))
+    data_Dict['Letter_List'] = list(sorted(list(letter_Set))) + ['_']
+    data_Dict['Phoneme_List'] = list(sorted(list(phoneme_Set))) + ['_']
+        
+    #There are two key types: [letter], [slot_Index, letter]
+    data_Dict['Letter_Index_Dict'] = {letter: letter_Index for letter_Index, letter in enumerate(data_Dict['Letter_List'])}
+    for slot_Index in range(data_Dict['Max_Word_Length']):
+        for letter_Index, letter in enumerate(data_Dict['Letter_List']):
+            data_Dict['Letter_Index_Dict'][slot_Index, letter] = slot_Index * len(data_Dict['Letter_List']) + letter_Index
+
+    #There are two key types: [phoneme], [slot_Index, phoneme]
+    data_Dict['Phoneme_Index_Dict'] = {phoneme: phoneme_Index for phoneme_Index, phoneme in enumerate(data_Dict['Phoneme_List'])}
+    for slot_Index in range(data_Dict['Max_Pronunciation_Length']):
+        for phoneme_Index, phoneme in enumerate(data_Dict['Phoneme_List']):
+            data_Dict['Phoneme_Index_Dict'][slot_Index, phoneme] = slot_Index * len(data_Dict['Phoneme_List']) + phoneme_Index
+
+    if not hp_Dict['Phoneme_Feature_File_Path'] is None:
+        with open (hp_Dict['Phoneme_Feature_File_Path'], 'r') as f:
+            readLines = f.readlines()[1:]
+        splited_ReadLine = [readLine.strip().split(',') for readLine in readLines]
+        data_Dict['Phoneme_Pattern_Dict'] = {pattern[0]: np.array([float(x) for x in pattern[1:]], dtype=np.float32) for pattern in splited_ReadLine}
+    else:
+        data_Dict['Phoneme_Pattern_Dict'] = {}
+        for phoneme in data_Dict['Phoneme_List']:
+            new_Pattern = np.zeros(shape = len(data_Dict['Phoneme_List']))
+            new_Pattern[data_Dict['Phoneme_Index_Dict'][phoneme]] = 1
+            data_Dict['Phoneme_Pattern_Dict'][phoneme] = new_Pattern
+                    
+    data_Dict['Orthography_Size'] = data_Dict['Max_Word_Length']
+    data_Dict['Phonology_Size'] = data_Dict['Phoneme_Pattern_Dict'][data_Dict['Phoneme_List'][0]].shape[0]
+
+    return data_Dict
+
 class Feeder:
     def __init__(self, start_Epoch, max_Epoch):
         self.start_Epoch = start_Epoch
@@ -25,55 +80,29 @@ class Feeder:
         pattern_Generate_Thread.start()
     
     def Load_Data(self):
-        with open (hp_Dict['Train']['Pattern_File_Path'], 'r') as f:
-            readLines = f.readlines()[1:]
+        data_Dict = Load_Data()
 
-        splited_ReadLine = [readLine.strip().split(',')[1:] for readLine in readLines]
-        self.word_Index_Dict = {word.lower(): index for index, (word, _, _, _, _) in enumerate(splited_ReadLine)}
-        self.pronunciation_Dict = {word.lower(): pronunciation for word, pronunciation, _, _, _ in splited_ReadLine}
-        self.frequency_Dict = {word.lower(): float(frequency) * 0.05 + 0.1 for word, _, _, frequency, _ in splited_ReadLine}
-        self.human_RT_Dict = {word.lower(): float(rt) for word, _, _, _, rt in splited_ReadLine}
+        self.word_Index_Dict = data_Dict['Word_Index_Dict']
+        self.pronunciation_Dict = data_Dict['Pronunciation_Dict']
+        self.frequency_Dict = data_Dict['Frequency_Dict']
+        self.human_RT_Dict = data_Dict['Human_RT_Dict']
         
-        self.max_Word_Length = max([len(word) for word in self.word_Index_Dict.keys()])
-        self.max_Pronunciation_Length = max([len(pronunciation) for pronunciation in self.pronunciation_Dict.values()])
+        self.max_Word_Length = data_Dict['Max_Word_Length']
+        self.max_Pronunciation_Length = data_Dict['Max_Pronunciation_Length']
 
-        if len(self.word_Index_Dict.keys()) != len(set(self.word_Index_Dict.keys())):
-            raise Exception('More than one word of the same spelling is in the data!')
-
-        letter_Set = set()
-        phoneme_Set = set()
-        for word, pronunciation in self.pronunciation_Dict.items():
-            letter_Set.update(set(word))
-            phoneme_Set.update(set(pronunciation))
-        self.letter_List = list(sorted(list(letter_Set))) + ['_']
-        self.phoneme_List = list(sorted(list(phoneme_Set))) + ['_']
+        self.letter_List = data_Dict['Letter_List']
+        self.phoneme_List = data_Dict['Phoneme_List']
             
         #There are two key types: [letter], [slot_Index, letter]
-        self.letter_Index_Dict = {letter: letter_Index for letter_Index, letter in enumerate(self.letter_List)}
-        for slot_Index in range(self.max_Word_Length):
-            for letter_Index, letter in enumerate(self.letter_List):
-                self.letter_Index_Dict[slot_Index, letter] = slot_Index * len(self.letter_List) + letter_Index
+        self.letter_Index_Dict = data_Dict['Letter_Index_Dict']
 
         #There are two key types: [phoneme], [slot_Index, phoneme]
-        self.phoneme_Index_Dict = {phoneme: phoneme_Index for phoneme_Index, phoneme in enumerate(self.phoneme_List)}
-        for slot_Index in range(self.max_Pronunciation_Length):
-            for phoneme_Index, phoneme in enumerate(self.phoneme_List):
-                self.phoneme_Index_Dict[slot_Index, phoneme] = slot_Index * len(self.phoneme_List) + phoneme_Index
+        self.phoneme_Index_Dict = data_Dict['Phoneme_Index_Dict']
 
-        if not hp_Dict['Phoneme_Feature_File_Path'] is None:
-            with open (hp_Dict['Phoneme_Feature_File_Path'], 'r') as f:
-                readLines = f.readlines()[1:]
-            splited_ReadLine = [readLine.strip().split(',') for readLine in readLines]
-            self.phoneme_Pattern_Dict = {pattern[0]: np.array([float(x) for x in pattern[1:]], dtype=np.float32) for pattern in splited_ReadLine}
-        else:
-            self.phoneme_Pattern_Dict = {}
-            for phoneme in self.phoneme_List:
-                new_Pattern = np.zeros(shape = len(self.phoneme_List))
-                new_Pattern[self.phoneme_Index_Dict[phoneme]] = 1
-                self.phoneme_Pattern_Dict[phoneme] = new_Pattern
+        self.phoneme_Pattern_Dict = data_Dict['Phoneme_Pattern_Dict']
                         
-        self.orthography_Size = self.max_Word_Length
-        self.phonology_Size = self.phoneme_Pattern_Dict[self.phoneme_List[0]].shape[0]
+        self.orthography_Size = data_Dict['Orthography_Size']
+        self.phonology_Size = data_Dict['Phonology_Size']
         
     def Analyzer_Label_Generate(self):
         index_Word_Dict = {index: word for word, index in self.word_Index_Dict.items()}
@@ -183,4 +212,4 @@ if __name__ == '__main__':
         max_Epoch = 1000, 
         )
         
-    print(new_Feeder.Get_Inference_Pattern())
+    print(new_Feeder.Get_Inference_Pattern('aaa'))

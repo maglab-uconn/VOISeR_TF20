@@ -82,7 +82,7 @@ The "ELP_groupData.csv" file was used to train VOISeR.
 ## Run
 
 ### Command
-    python VOISeR.py [parameters]
+    python Model.py [parameters]
     
 ### Parameters
 
@@ -98,4 +98,46 @@ The "ELP_groupData.csv" file was used to train VOISeR.
     * Attach an tag to each result directory.
     * This value does not affect the performance of the model.
 
+## Inference
 
+### Method
+
+1. In terminal, type 'ipython'
+
+2. Type the following commands with your 'using_Epoch' and 'export_Path':
+```
+from Model import VOISeR
+
+using_Epoch= <int>
+export_Path= <path>
+
+new_VOISeR = VOISeR(
+    start_Epoch= using_Epoch,
+    max_Epoch= using_Epoch,
+    export_Path= export_Path
+    )
+new_VOISeR.restore(start_Epoch= using_Epoch)
+```
+
+3. Set 'letter_String_List' and 'added_Pronunciation_Dict'.
+    * If letter strings are trained words:
+        ```
+        letter_String_List = <word list>
+        added_Pronunciation_Dict = {}
+        ```
+    * If letter strings are non-trained words(nonwords):
+        ```
+        letter_String_List = [<str>]
+        added_Pronunciation_Dict = {<str>: <pronunciation>}        
+        ```
+    * The pronunciations of all nonword must be set at add_Pronunciation_Dict
+
+4. Type the following commands:
+```
+new_VOISeR.Inference(
+    letter_String_List = letter_String_List
+    added_Pronunciation_Dict = added_Pronunciation_Dict
+    )
+```
+
+5. Please check 'Inference.Summary.txt' in the inference directory. 
