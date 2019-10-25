@@ -1,7 +1,7 @@
 import numpy as np;
 import tensorflow as tf;
 from threading import Thread;
-from collections import deque;
+from collections import deque, Sequence;
 from random import shuffle;
 import time, json;
 
@@ -178,7 +178,7 @@ class Feeder:
             time.sleep(0.01)
         return self.pattern_Queue.popleft()
 
-    def Get_Inference_Pattern(self, letter_String_List, added_Pronunciation_Dict = {}):
+    def Get_Inference_Pattern_Bak(self, letter_String_List, added_Pronunciation_Dict = {}):
         orthography_Pattern = np.vstack([self.Word_to_Pattern(letter_String) for letter_String in letter_String_List]).astype(np.int32)
 
         pattern_Index_List = list(range(len(letter_String_List)))
@@ -205,6 +205,77 @@ class Feeder:
 
         return split_Orthography_Pattern_List, word_Label_Indices, np.array(phoneme_Label_Indices_List, dtype=np.int32)
 
+    def Get_Inference_Pattern(self, letter_String_List, added_Pronunciation_Dict = {}):
+        '''
+        added_Pronunciation_Dict: key is letter string, value is 'str' or sequence of 'str'.
+        '''
+        index_Added_Pronunciation_Dict = {}
+        for pronunciation in added_Pronunciation_Dict.values():
+            if isinstance(pronunciation, str):
+                if not pronunciation in index_Added_Pronunciation_Dict.keys():
+                    index_Added_Pronunciation_Dict[len(index_Added_Pronunciation_Dict)] = pronunciation
+            elif isinstance(pronunciation, Sequence):
+                for heteronym in pronunciation:
+                    if not heteronym in index_Added_Pronunciation_Dict.values():
+                        index_Added_Pronunciation_Dict[len(index_Added_Pronunciation_Dict)] = heteronym
+            else:
+                raise ValueError('the value of \'added_Pronunciation_Dict\' must be str or Sequence: The inserted type: {}'.format(type(pronunciation)))
+
+        added_Word_Labels = np.zeros(
+            shape= (len(index_Added_Pronunciation_Dict), self.max_Pronunciation_Length, self.phonology_Size),
+            dtype= np.float32
+            )
+        for index, pronunciation in index_Added_Pronunciation_Dict.items():
+            added_Word_Labels[index] = self.Pronunciation_to_Pattern(pronunciation)
+
+        added_Pronunciation_Index_Dict = {
+            pronunciation: index + self.word_Labels.shape[0]
+            for index, pronunciation in index_Added_Pronunciation_Dict.items()
+            }
+
+        inference_Tuple_List = []
+        for letter_String in letter_String_List:
+            if letter_String in added_Pronunciation_Dict.keys():                
+                pronunciation = added_Pronunciation_Dict[letter_String]
+                if isinstance(pronunciation, str):
+                    inference_Tuple_List.append((
+                        letter_String,
+                        pronunciation,
+                        added_Pronunciation_Index_Dict[pronunciation]
+                        ))
+                elif isinstance(pronunciation, Sequence):
+                    for heteronym in pronunciation:
+                        inference_Tuple_List.append((
+                        letter_String,
+                        heteronym,
+                        added_Pronunciation_Index_Dict[heteronym]
+                        ))
+            elif letter_String in self.word_Index_Dict.keys():
+                inference_Tuple_List.append((
+                    letter_String,
+                    self.pronunciation_Dict[letter_String],
+                    self.word_Index_Dict[letter_String]
+                    ))
+            else:
+                raise ValueError('There is no pronunciation information of {}.'.format(letter_String))
+
+        letter_String_List, pronunciation_List, word_Label_Index_List = zip(*inference_Tuple_List)
+
+        orthography_Pattern = np.vstack([self.Word_to_Pattern(letter_String) for letter_String in letter_String_List]).astype(np.int32)
+        pattern_Index_List = list(range(len(letter_String_List)))
+        pattern_Index_Batch_List = [pattern_Index_List[x:x+hp_Dict['Batch_Size']] for x in range(0, len(pattern_Index_List), hp_Dict['Batch_Size'])]        
+        split_Orthography_Pattern_List = [orthography_Pattern[pattern_Index_Batch] for pattern_Index_Batch in pattern_Index_Batch_List]
+
+        word_Label_Indices = np.array(word_Label_Index_List, dtype= np.int32)        
+
+        phoneme_Index_Dict = {phoneme: index for index, phoneme in enumerate(self.phoneme_List)}
+        phoneme_Label_Indices_List = []
+        for pronunciation in pronunciation_List:
+            pronunciation = pronunciation + '_' * (self.max_Pronunciation_Length - len(pronunciation))
+            phoneme_Label_Indices_List.append(np.array([phoneme_Index_Dict[phoneme] for phoneme in pronunciation], dtype=np.int32))
+        phoneme_Label_Indices = np.array(phoneme_Label_Indices_List, dtype=np.int32)
+
+        return letter_String_List, pronunciation_List, split_Orthography_Pattern_List, word_Label_Indices, phoneme_Label_Indices, added_Word_Labels
 
 if __name__ == '__main__':
     new_Feeder = Feeder(

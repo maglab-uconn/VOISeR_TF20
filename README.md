@@ -105,39 +105,52 @@ The "ELP_groupData.csv" file was used to train VOISeR.
 1. In terminal, type 'ipython' or 'python'.
 
 2. Type the following commands with your 'using_Epoch' and 'export_Path':
-```
-from Model import VOISeR
+    ```
+    from Model import VOISeR
 
-using_Epoch= <int>
-export_Path= <path>
+    using_Epoch= <int>
+    export_Path= <path>
 
-new_VOISeR = VOISeR(
-    start_Epoch= using_Epoch,
-    max_Epoch= using_Epoch,
-    export_Path= export_Path
-    )
-new_VOISeR.restore(start_Epoch= using_Epoch)
-```
+    new_VOISeR = VOISeR(
+        start_Epoch= using_Epoch,
+        max_Epoch= using_Epoch,
+        export_Path= export_Path
+        )
+    new_VOISeR.Restore(start_Epoch= using_Epoch)
+    ```
+    * `'export_Path'` is where the 'Checkpoint' directory is visible.
 
 3. Set 'letter_String_List' and 'added_Pronunciation_Dict'.
-    * If letter strings are trained words:
-        ```
-        letter_String_List = <word list>
-        added_Pronunciation_Dict = {}
-        ```
-    * If letter strings are non-trained words(nonwords):
-        ```
-        letter_String_List = [<str>]
-        added_Pronunciation_Dict = {<str>: <pronunciation>}        
-        ```
-    * The pronunciations of all nonword must be set at 'add_Pronunciation_Dict'.
+
+    * `letter_String_List`
+        * Each element must be str type.
+        * Example
+            ```
+            letter_String_List = ['best', 'bio', 'gode']
+            ```        
+
+    * `added_Pronunciation_Dict`
+        * Each key must be str type.
+        * Each value must be str, list, or tuple type.
+        * If value type is list or tuple which has multi-elements, it means the key letter string has multiple heteronyms.
+        * The pronunciations of __all nonword__ must be set at 'add_Pronunciation_Dict'.
+        * Example
+            ```
+            added_Pronunciation_Dict = {
+                'lail': 'lel',
+                'peet':	'pit',
+                'meak': ['mik', 'mek']
+                }
+            ```    
 
 4. Type the following commands:
-```
-new_VOISeR.Inference(
-    letter_String_List = letter_String_List
-    added_Pronunciation_Dict = added_Pronunciation_Dict
-    )
-```
+    ```
+    new_VOISeR.Inference(
+        letter_String_List= letter_String_List
+        added_Pronunciation_Dict= added_Pronunciation_Dict,
+        file_Tag= 'Inference'
+        )
+    ```
+* `'file_Tag'` is for result management. This parameter does not affect to the result.
 
-5. Please check 'Inference.Summary.txt' in the inference directory. 
+5. Please check `'<file_Tag>.Summary.txt'` in the inference directory. 

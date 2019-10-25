@@ -131,14 +131,14 @@ class VOISeR:
         print('Epoch {} checkpoint saved'.format(current_Epoch + 1))
         self.Inference(epoch= current_Epoch + 1, export_Raw= True)
 
-    def Inference(self, epoch= None, letter_String_List= None, added_Pronunciation_Dict = {}, export_Raw= False):
+    def Inference(self, epoch= None, letter_String_List= None, added_Pronunciation_Dict = {}, export_Raw= False, file_Tag= 'Inference'):
         os.makedirs(os.path.join(self.export_Path, 'Inference'), exist_ok= True)
 
         if letter_String_List is None:
             index_Word_Dict = {index: word for word, index in self.feeder.word_Index_Dict.items()}
             letter_String_List = [index_Word_Dict[index] for index in range(len(index_Word_Dict))]
 
-        pattern_List, word_Label_Indices, phoneme_Label_Indices = self.feeder.Get_Inference_Pattern(letter_String_List= letter_String_List, added_Pronunciation_Dict= added_Pronunciation_Dict)
+        letter_String_List, pronunciation_List, pattern_List, word_Label_Indices, phoneme_Label_Indices, added_Word_Labels = self.feeder.Get_Inference_Pattern(letter_String_List= letter_String_List, added_Pronunciation_Dict= added_Pronunciation_Dict)
 
         hiddens_List = []
         outputs_List = []
@@ -154,17 +154,19 @@ class VOISeR:
 
         self.Export_Inference(
             letter_String_List,
+            pronunciation_List,
             hiddens,
             outputs,
             word_Label_Indices,
             phoneme_Label_Indices,
+            added_Word_Labels,
             epoch,
             {key: value for key, value in self.feeder.trained_Pattern_Index_Dict.items() if not epoch is None and key < epoch},
-            added_Pronunciation_Dict,
-            export_Raw
+            export_Raw,
+            file_Tag
             )
 
-    def Export_Inference(self, letter_String_List, hiddens, outputs, word_Label_Indices, phoneme_Label_Indices, epoch, trained_Pattern_Index_Dict, added_Pronunciation_Dict = {}, export_Raw= False):
+    def Export_Inference(self, letter_String_List, pronunciation_List, hiddens, outputs, word_Label_Indices, phoneme_Label_Indices, added_Word_Labels, epoch, trained_Pattern_Index_Dict, export_Raw= False, file_Tag= 'Inference'):
         trained_Pattern_Count_Dict = {index: 0 for index in self.feeder.word_Index_Dict.values()}
         for index_List in trained_Pattern_Index_Dict.values():
             for index in index_List:
@@ -173,31 +175,32 @@ class VOISeR:
         if export_Raw:
             export_Dict = {
                 'Epoch': epoch,
-                'Letter_String_List': letter_String_List,
+                'Pattern_Pair': list(zip(letter_String_List, pronunciation_List)),
                 'Hidden': hiddens,
                 'Output': outputs,
                 'Trained_Pattern_Count_Dict': trained_Pattern_Count_Dict
                 }
-            with open(os.path.join(self.export_Path, 'Inference', '{}.Raw.pickle'.format('E_{}'.format(epoch) if not epoch is None else 'Inference')), 'wb') as f:
+            with open(os.path.join(self.export_Path, 'Inference', '{}{}.Raw.pickle'.format('E_{}.'.format(epoch) if not epoch is None else '', file_Tag)), 'wb') as f:
                 pickle.dump(export_Dict, f, protocol= 4)
         
         pattern_Index_List = list(range(hiddens.shape[0]))
         pattern_Index_Batch_List = [pattern_Index_List[x:x+hp_Dict['Analyzer']['Batch_Size']] for x in range(0, len(pattern_Index_List), hp_Dict['Analyzer']['Batch_Size'])]        
         
         hidden_Dict = {}
-        result_Dict = {}        
+        result_Dict = {}
         for index, pattern_Index_Batch in enumerate(pattern_Index_Batch_List):
             batch_Hidden_Dict = self.hidden_Analyzer(inputs= hiddens[pattern_Index_Batch])
             for key, value in batch_Hidden_Dict.items():
                 if not key in hidden_Dict.keys():
                     hidden_Dict[key] = []
                 hidden_Dict[key].append(value.numpy())
-            
-            batch_Result_Dict = self.output_Analyzer(inputs= outputs[pattern_Index_Batch], word_label_indices= word_Label_Indices[pattern_Index_Batch], phoneme_label_indices= phoneme_Label_Indices[pattern_Index_Batch])
+
+            batch_Result_Dict = self.output_Analyzer(inputs= outputs[pattern_Index_Batch], word_label_indices= word_Label_Indices[pattern_Index_Batch], phoneme_label_indices= phoneme_Label_Indices[pattern_Index_Batch], added_Word_Labels= added_Word_Labels)
             for key, value in batch_Result_Dict.items():
                 if not key in result_Dict.keys():
                     result_Dict[key] = []
                 result_Dict[key].append(value.numpy())
+                
             progress(index + 1, len(pattern_Index_Batch_List), status='Inference analyzer running')
         print()
 
@@ -231,8 +234,9 @@ class VOISeR:
             ]
         
         export_List = ['\t'.join(column_Title_List)]
-        for index, (letter_String, rt_CS, rt_MSE, rt_ED, rt_CE, exported_Pronunciation, acc_CS, acc_MSE, acc_ED, acc_CE, acc_Pronunciation, hidden_CS, hidden_MSE, hidden_ED, hidden_CE) in enumerate(zip(
+        for index, (letter_String, target_Pronunciation, rt_CS, rt_MSE, rt_ED, rt_CE, exported_Pronunciation, acc_CS, acc_MSE, acc_ED, acc_CE, acc_Pronunciation, hidden_CS, hidden_MSE, hidden_ED, hidden_CE) in enumerate(zip(
             letter_String_List,
+            pronunciation_List,
             result_Dict['RT', 'CS'],
             result_Dict['RT', 'MSE'],
             result_Dict['RT', 'ED'],
@@ -248,11 +252,12 @@ class VOISeR:
             hidden_Dict['ED'],
             hidden_Dict['CE'],
             )):
+
             is_Word = letter_String in self.feeder.word_Index_Dict.keys()
             new_Line_List = [
                 str(epoch or 'None'),
                 letter_String,
-                added_Pronunciation_Dict[letter_String] if letter_String in added_Pronunciation_Dict.keys() else self.feeder.pronunciation_Dict[letter_String],
+                target_Pronunciation,
                 str(len(letter_String)),
                 str(self.feeder.frequency_Dict[letter_String]) if is_Word else 'None',
                 str(self.feeder.human_RT_Dict[letter_String]) if is_Word else 'None',
@@ -274,7 +279,7 @@ class VOISeR:
                 ]
             export_List.append('\t'.join(new_Line_List))
 
-        with open(os.path.join(self.export_Path, 'Inference', '{}.Summary.txt'.format('E_{}'.format(epoch) if not epoch is None else 'Inference')), 'w') as f:
+        with open(os.path.join(self.export_Path, 'Inference', '{}{}.Summary.txt'.format('E_{}.'.format(epoch) if not epoch is None else '', file_Tag)), 'w') as f:
             f.write('\n'.join(export_List))
 
 if __name__ == "__main__":
