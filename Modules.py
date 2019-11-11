@@ -4,21 +4,21 @@ import json
 with open('Hyper_Parameters.json', 'r') as f:
     hp_Dict = json.load(f)
 
-class Embedding(tf.keras.layers.Layer):
+class Embedding(tf.keras.layers.Layer): # Generating orthography pattern. Using one-hot or changing one-hot to vector for orthography pattern.
     def __init__(self, input_dim):
         super(Embedding, self).__init__(name= '')
         self.input_dim = input_dim
-        if not hp_Dict['Orthography_Embedding_Size'] is None:
-            self.embedding = tf.keras.layers.Embedding(
+        if not hp_Dict['Orthography_Embedding_Size'] is None:   # If user set a specific embedding size of orthography
+            self.embedding = tf.keras.layers.Embedding( # Generating a embedding vectors
                 input_dim= input_dim,
                 output_dim= hp_Dict['Orthography_Embedding_Size']
                 )
 
     def call(self, inputs, decoder_length):
-        if not hp_Dict['Orthography_Embedding_Size'] is None:
+        if not hp_Dict['Orthography_Embedding_Size'] is None:   # If user set a specific embedding size of orthography
             new_Tensor = self.embedding(inputs)
 
-        else:
+        else:   # Use one-hot
             new_Tensor = tf.one_hot(
                 indices= inputs,
                 depth= self.input_dim,
@@ -26,8 +26,8 @@ class Embedding(tf.keras.layers.Layer):
 
         batch_Size = tf.shape(new_Tensor)[0]
         time, dim = new_Tensor.shape[1:3]
-        new_Tensor = tf.reshape(new_Tensor, (batch_Size, time * dim))
-        new_Tensor = tf.tile(tf.expand_dims(new_Tensor, axis=1), multiples=[1, decoder_length ,1])
+        new_Tensor = tf.reshape(new_Tensor, (batch_Size, time * dim))   #3D to 2D, [Batch, word length, vector dimension] -> [Batch, word length * vector dimension]
+        new_Tensor = tf.tile(tf.expand_dims(new_Tensor, axis=1), multiples=[1, decoder_length ,1])  #[Batch, word length * vector dimension] -> [Batch, pronunciation step, word length * vector dimension]
 
         return new_Tensor
 
@@ -35,7 +35,7 @@ class Embedding(tf.keras.layers.Layer):
 class RNN(tf.keras.Model):
     def __init__(self, projection_Size):
         super(RNN, self).__init__(name= '')
-        self.cell = Cell(
+        self.cell = Cell(   #Generating new RNN cell
             units= hp_Dict['RNN']['Size'],
             projection_units= projection_Size,
             use_feedback= hp_Dict['RNN']['Use_Feedback'],
@@ -46,20 +46,27 @@ class RNN(tf.keras.Model):
     @tf.function
     def call(self, inputs, training= False):
         input_Data = tf.transpose(inputs, [1, 0, 2])    #[Batch, Time, Dim] -> [Time, Batch, Dim]
-        outputs = tf.TensorArray(input_Data.dtype, input_Data.shape[0])
-        projections = tf.TensorArray(input_Data.dtype, input_Data.shape[0])        
+        outputs = tf.TensorArray(input_Data.dtype, input_Data.shape[0]) # Storage for output
+        projections = tf.TensorArray(input_Data.dtype, input_Data.shape[0]) # Storage for hidden   
 
-        state = self.cell.get_initial_state(batch_size= tf.shape(input_Data)[1], dtype= input_Data.dtype)
-        projection = self.cell.get_initial_projection(batch_size= tf.shape(input_Data)[1], dtype= input_Data.dtype)
+        state = self.cell.get_initial_state(batch_size= tf.shape(input_Data)[1], dtype= input_Data.dtype)   #Initial hidden state to calculate first step. Usually, get a zero vector for initial state.
+        projection = self.cell.get_initial_projection(batch_size= tf.shape(input_Data)[1], dtype= input_Data.dtype) #Initial output activation to calculate first step. Usually, get a zero vector for initial state.
         
-        for index in tf.range(input_Data.shape[0]):
+        for index in tf.range(input_Data.shape[0]): #Time step calc.
             output, projection, state = self.cell(input_Data[index], projection, state, training)
             outputs = outputs.write(index, output)
             projections = projections.write(index, projection)
 
-        return tf.transpose(outputs.stack(), [1, 0, 2]), tf.transpose(projections.stack(), [1, 0, 2]), state
+        return tf.transpose(outputs.stack(), [1, 0, 2]), tf.transpose(projections.stack(), [1, 0, 2]), state    #By transpose, [Step, Batch, Vector]  -> [Batch, Step, Vector]
 
 
+# This class is referred to SimpleRNN of TF 2.0:
+# https://github.com/tensorflow/tensorflow/blob/r2.0/tensorflow/python/keras/layers/recurrent.py#L1109-L1268
+# The main purpose of this class is to allow output layer activation to also participate in next hidden calculations.
+# This class is intended to form similar code while porting from VOISeR TF1.x version.
+# In TF 2.0, there is a easier way to use the 'for-loop' to do the same thing for a 'simple RNN'. If you are a new person who work VOISeR programming in the future, use that method.
+# This code is not for end users. I don't comment this class.
+# If you really need to understand this class, please see the above link.
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
