@@ -5,7 +5,7 @@ VOISeR is a simple computational reading model to support the friends-and-enemie
 ## Differences from Earlier version
 
 * TensorFlow 2.0 compatiblity
-* Some arg parser parameters are moved to 'Hyper_Paremeter.json' file.
+* Some arg parser parameters are moved to 'Hyper_Parameters.json' file.
 * Analyzer is in the main code.
 * Continue learning function from saved checkpoint added
 
